@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Multilingual Voice Chatbot with Vector DB</title>
+    <!-- Add Markdown-it library for markdown parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.1/markdown-it.min.js"></script>
+    <!-- Add MathJax for rendering mathematical expressions -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+    <style>
+        .chat-icon {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #4285f4;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        /* Additional styles for math expressions */
+        .bot-message .math {
+            font-size: 1.1em;
+        }
+        
+        /* Ensure equations have proper spacing */
+        .bot-message .math-block {
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        
+        /* Improve display of inline math */
+        .bot-message .math-inline {
+            padding: 0 2px;
+        }
+
+        .chat-container {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 350px;
+            height: 500px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            display: none;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 15px;
+            background: #4285f4;
+            color: white;
+            border-radius: 15px 15px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-settings {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .chat-input {
+            padding: 15px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .input-container {
+            display: flex;
+            align-items: center;
+        }
+
+        input[type="text"], select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+        }
+
+        .message {
+            margin: 10px 0;
+            padding: 8px 12px;
+            border-radius: 15px;
+            max-width: 80%;
+        }
+
+        .user-message {
+            background: #4285f4;
+            color: white;
+            margin-left: auto;
+        }
+
+        .bot-message {
+            background: #f0f0f0;
+            margin-right: auto;
+        }
+        
+        /* Markdown styling within bot messages */
+        .bot-message h1, .bot-message h2, .bot-message h3 {
+            margin-top: 10px;
+            margin-bottom: 5px;
+        }
+        
+        .bot-message p {
+            margin: 5px 0;
+        }
+        
+        .bot-message ul, .bot-message ol {
+            margin: 5px 0;
+            padding-left: 20px;
+        }
+        
+        .bot-message pre {
+            background: #e0e0e0;
+            padding: 8px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        
+        .bot-message code {
+            background: #e0e0e0;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        
+        .bot-message blockquote {
+            border-left: 3px solid #ccc;
+            margin: 5px 0;
+            padding-left: 10px;
+            color: #555;
+        }
+        
+        .bot-message table {
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        
+        .bot-message th, .bot-message td {
+            border: 1px solid #ccc;
+            padding: 5px;
+        }
+
+        .audio-control {
+            margin-top: 5px;
+            cursor: pointer;
+            color: #4285f4;
+            font-size: 12px;
+        }
+
+        .settings-panel {
+            position: fixed;
+            bottom: 80px;
+            right: 380px;
+            width: 200px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            padding: 15px;
+            display: none;
+        }
+
+        .settings-panel h3 {
+            margin-top: 0;
+        }
+
+        .settings-panel select {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .settings-btn {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+        }
+        
+        .voice-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #4285f4;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-left: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .voice-btn.recording {
+            background: #ff4444;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+        
+        .status-indicator {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+            text-align: center;
+        }
+        
+        /* Styles for search results */
+        .search-results {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 3px solid #4285f4;
+            font-size: 0.9em;
+        }
+        
+        .result-item {
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .result-item:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        
+        .result-score {
+            font-size: 0.8em;
+            color: #888;
+        }
+        
+        /* Toggle switch for search mode */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .toggle-label {
+            margin-right: 10px;
+            font-size: 12px;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 20px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: #4285f4;
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        .sign-language-btn {
+        background: #4285f4;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-top: 5px;
+        display: none;
+        }
+
+        .sign-language-video {
+            margin-top: 10px;
+            width: 100%;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-icon" onclick="toggleChat()">💬</div>
+    <div class="chat-container" id="chatContainer">
+        <div class="chat-header">
+            <span>Multilingual Assistant</span>
+            <div class="chat-settings">
+                <button class="settings-btn" onclick="toggleSettings()">⚙️</button>
+            </div>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input">
+            <div class="input-container">
+                <input type="text" id="userInput" placeholder="Type your message...">
+                <button type="button" class="voice-btn" id="voiceBtn" onclick="toggleVoiceInput()">🎤</button>
+            </div>
+            <div class="status-indicator" id="statusIndicator"></div>
+        </div>
+    </div>
+
+    <div class="settings-panel" id="settingsPanel">
+        <h3>Settings</h3>
+        
+        <div class="toggle-container">
+            <span class="toggle-label">Vector DB Search:</span>
+            <label class="toggle-switch">
+                <input type="checkbox" id="searchModeToggle">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <div class="toggle-container">
+            <span class="toggle-label">Sign Language:</span>
+            <label class="toggle-switch">
+                <input type="checkbox" id="signLanguageToggle">
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        
+        <label for="languageSelect">Language:</label>
+        <select id="languageSelect">
+            <option value="en-IN">English</option>
+            <option value="hi-IN">Hindi</option>
+            <option value="bn-IN">Bengali</option>
+            <option value="gu-IN">Gujarati</option>
+            <option value="kn-IN">Kannada</option>
+            <option value="ml-IN">Malayalam</option>
+            <option value="mr-IN">Marathi</option>
+            <option value="od-IN">Odia</option>
+            <option value="pa-IN">Punjabi</option>
+            <option value="ta-IN">Tamil</option>
+            <option value="te-IN">Telugu</option>
+        </select>
+
+        <label for="speakerSelect">Speaker:</label>
+        <select id="speakerSelect">
+            <option value="meera">Meera</option>
+            <option value="pavithra">Pavithra</option>
+            <option value="maitreyi">Maitreyi</option>
+            <option value="arvind">Arvind</option>
+            <option value="amol">Amol</option>
+            <option value="amartya">Amartya</option>
+            <option value="diya">Diya</option>
+            <option value="neel">Neel</option>
+            <option value="misha">Misha</option>
+            <option value="vian">Vian</option>
+            <option value="arjun">Arjun</option>
+            <option value="maya">Maya</option>
+        </select>
+    </div>
+
+    <script>
+ // Initialize markdown-it with MathJax support
+const md = window.markdownit({
+    html: true,
+    typographer: true
+});
+
+// Initialize sign language toggle state
+document.getElementById('signLanguageToggle').checked = false;
+
+// API keys
+const OPENAI_API_KEY = '';
+const SARVAM_API_KEY = '';
+const VECTOR_DB_API_URL = 'http://localhost:5000/search'; // Your vector DB API endpoint
+
+// Global variables
+let isChatOpen = false;
+let isSettingsOpen = false;
+let isRecording = false;
+let recordingTimer = null;
+let recordingSeconds = 0;
+let mediaRecorder = null;
+let audioChunks = [];
+let audioBlob = null;
+
+// Chat context to maintain conversation history
+let chatContext = [];
+const MAX_CONTEXT_LENGTH = 10; // Maximum number of messages to keep for context
+
+// Toggle chat container visibility
+function toggleChat() {
+    const container = document.getElementById('chatContainer');
+    isChatOpen = !isChatOpen;
+    container.style.display = isChatOpen ? 'flex' : 'none';
+    
+    // Close settings panel if chat is closed
+    if (!isChatOpen && isSettingsOpen) {
+        toggleSettings();
+    }
+    
+    // Stop recording if chat is closed
+    if (!isChatOpen && isRecording) {
+        stopRecording();
+    }
+}
+
+// Toggle settings panel visibility
+function toggleSettings() {
+    const settings = document.getElementById('settingsPanel');
+    isSettingsOpen = !isSettingsOpen;
+    settings.style.display = isSettingsOpen ? 'block' : 'none';
+}
+
+// Send text message from input field
+// Send text message from input field
+async function sendMessage(event) {
+    if (event) event.preventDefault();
+    
+    const input = document.getElementById('userInput');
+    const message = input.value.trim();
+    if (!message) return;
+
+    // Add user message to chat
+    addMessage(message, 'user');
+    
+    // Add to context
+    chatContext.push({
+        role: "user",
+        content: message
+    });
+    
+    input.value = '';
+
+    try {
+        // Show typing indicator
+        const typingId = showTypingIndicator();
+        
+        // Get selected language
+        const userLanguage = document.getElementById('languageSelect').value;
+        
+        // Check if we should use vector search
+        const useVectorSearch = document.getElementById('searchModeToggle').checked;
+        
+        // If not English, translate the user message to English
+        let translatedQuery = message;
+        if (userLanguage !== 'en-IN') {
+            translatedQuery = await translateText(message, userLanguage, 'en-IN');
+        }
+        
+        // If vector search is enabled, get relevant context
+        let vectorSearchResults = [];
+        if (useVectorSearch) {
+            vectorSearchResults = await searchVectorDB(translatedQuery);
+        }
+        
+        // Get bot response from OpenAI
+        const botResponse = await getBotResponse(translatedQuery, vectorSearchResults);
+        
+        // If not English, translate the response back to user's language
+        let translatedResponse = botResponse;
+        if (userLanguage !== 'en-IN') {
+            translatedResponse = await translateText(botResponse, 'en-IN', userLanguage);
+        }
+        
+        // Remove typing indicator
+        removeTypingIndicator(typingId);
+        
+        // Add bot message (with markdown parsing)
+        const messageId = addMessage(translatedResponse, 'bot', true);
+        
+        // Check if sign language is enabled
+        const useSignLanguage = document.getElementById('signLanguageToggle').checked;
+        if (useSignLanguage) {
+            // Convert text to sign language
+            try {
+                const signLanguageData = await convertToSignLanguage(botResponse);
+                // Add sign language button to the message
+                addSignLanguageButton(messageId, signLanguageData);
+            } catch (error) {
+                console.error('Error converting to sign language:', error);
+            }
+        }
+        
+        // Add to context
+        chatContext.push({
+            role: "assistant",
+            content: botResponse // Store the English version in context
+        });
+        
+        // Trim context if it gets too long
+        if (chatContext.length > MAX_CONTEXT_LENGTH * 2) {
+            chatContext = chatContext.slice(-MAX_CONTEXT_LENGTH * 2);
+        }
+        
+        // Convert bot response to speech
+        const selectedSpeaker = document.getElementById('speakerSelect').value;
+        const audioData = await textToSpeech(translatedResponse, userLanguage, selectedSpeaker);
+        
+        // Add audio player to message
+        addAudioPlayer(messageId, audioData);
+        
+        // Process math expressions if MathJax is available
+        if (window.MathJax) {
+            setTimeout(() => {
+                MathJax.typesetPromise([document.getElementById(messageId)]).catch(err => console.error('MathJax error:', err));
+            }, 100);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        addMessage('Sorry, I encountered an error. Please try again.', 'bot');
+    }
+}
+
+// Convert text to sign language
+async function convertToSignLanguage(text) {
+    try {
+        const response = await fetch('http://127.0.0.1:5000/convert', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                text: text
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to convert to sign language: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error("Sign language conversion error:", error);
+        throw error;
+    }
+}
+
+// Add sign language button to message
+function addSignLanguageButton(messageId, signLanguageData) {
+    const messageDiv = document.getElementById(messageId);
+    if (!messageDiv) return;
+
+    // Create container for video
+    const videoContainer = document.createElement('div');
+    videoContainer.className = 'sign-language-container';
+    
+    // Create button to show sign language
+    const signButton = document.createElement('button');
+    signButton.className = 'sign-language-btn';
+    signButton.textContent = 'View Sign Language';
+    signButton.style.display = 'block';
+    
+    // Create video element (initially hidden)
+    const videoElement = document.createElement('video');
+    videoElement.className = 'sign-language-video';
+    videoElement.controls = true;
+    
+    if (signLanguageData.success && signLanguageData.video_url) {
+        videoElement.src = signLanguageData.video_url;
+    }
+    
+    // Toggle video visibility when button is clicked
+    signButton.onclick = function() {
+        if (videoElement.style.display === 'none' || !videoElement.style.display) {
+            videoElement.style.display = 'block';
+            signButton.textContent = 'Hide Sign Language';
+            // Start playing the video
+            videoElement.play().catch(err => console.error('Error playing video:', err));
+        } else {
+            videoElement.style.display = 'none';
+            signButton.textContent = 'View Sign Language';
+            // Pause the video
+            videoElement.pause();
+        }
+    };
+    
+    // Add button and video to container
+    videoContainer.appendChild(signButton);
+    videoContainer.appendChild(videoElement);
+    
+    // Add the sign language container to the message
+    messageDiv.appendChild(videoContainer);
+    
+    // Add word status information if available
+    if (signLanguageData.word_status && signLanguageData.word_status.length > 0) {
+        const statusDiv = document.createElement('div');
+        statusDiv.className = 'sign-language-status';
+        statusDiv.style.fontSize = '10px';
+        statusDiv.style.color = '#666';
+        statusDiv.style.marginTop = '5px';
+        statusDiv.style.display = 'none';
+        
+        let statusText = 'Words converted: ';
+        signLanguageData.word_status.forEach((status, index) => {
+            if (index > 0) statusText += ', ';
+            statusText += status.word;
+            if (!status.found && !status.spelled) {
+                statusText += ' (skipped)';
+            } else if (!status.found && status.spelled) {
+                statusText += ' (spelled)';
+            }
+        });
+        
+        statusDiv.textContent = statusText;
+        videoContainer.appendChild(statusDiv);
+        
+        // Show/hide status with video
+        signButton.addEventListener('click', function() {
+            statusDiv.style.display = videoElement.style.display;
+        });
+    }
+}
+
+// Search vector database for relevant information
+async function searchVectorDB(query, topK = 3) {
+    try {
+        const response = await fetch(VECTOR_DB_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                query: query,
+                top_k: topK
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Vector DB search failed: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data.results || [];
+    } catch (error) {
+        console.error("Vector DB search error:", error);
+        // Return empty array on error to continue without vector search
+        return [];
+    }
+}
+
+// Show typing indicator while waiting for bot response
+function showTypingIndicator() {
+    const messagesDiv = document.getElementById('chatMessages');
+    const typingDiv = document.createElement('div');
+    const id = 'typing-' + Date.now();
+    typingDiv.id = id;
+    typingDiv.className = 'message bot-message';
+    typingDiv.textContent = 'Typing...';
+    messagesDiv.appendChild(typingDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    return id;
+}
+
+// Remove typing indicator once response is ready
+function removeTypingIndicator(id) {
+    const typingDiv = document.getElementById(id);
+    if (typingDiv) {
+        typingDiv.remove();
+    }
+}
+
+// Format vector search results for inclusion in the prompt
+function formatVectorResults(results) {
+    if (!results || results.length === 0) {
+        return "";
+    }
+    
+    let formattedResults = "I've found the following information that might be relevant:\n\n";
+    
+    results.forEach((result, index) => {
+        formattedResults += `[${index + 1}] ${result.text}\n\n`;
+    });
+    
+    formattedResults += "Please use this information to help answer the question if relevant.\n";
+    
+    return formattedResults;
+}
+
+// Get response from OpenAI with context and vector search results
+async function getBotResponse(prompt, vectorResults = []) {
+    const useVectorResults = vectorResults.length > 0;
+    let vectorContext = useVectorResults ? formatVectorResults(vectorResults) : "";
+    
+    const systemMessage = "You are a helpful assistant. Your responses should be clear and easy to understand. Use markdown formatting for structure when appropriate (headings, lists, code blocks, etc). For mathematical expressions, use LaTeX notation with dollar signs like $I = \\frac{V}{R}$ for inline math and $$I = \\frac{V}{R}$$ for display math. This will ensure proper rendering of mathematical formulas. Maintain context in your responses by referring to previous messages when relevant.";
+    
+    // Enhanced system message with vector search information
+    const enhancedSystemMessage = useVectorResults 
+        ? systemMessage + " When relevant information is provided from the vector database, incorporate it into your responses, but don't mention explicitly that the information came from a vector database unless asked."
+        : systemMessage;
+    
+    // Create messages array with system message and context
+    const messages = [
+        {
+            role: "system",
+            content: enhancedSystemMessage
+        }
+    ];
+    
+    // Add context messages
+    messages.push(...chatContext);
+    
+    // Add vector search results if available
+    if (useVectorResults) {
+        messages.push({
+            role: "system",
+            content: vectorContext
+        });
+    }
+    
+    // Add the current user message if not already in context
+    if (chatContext.length === 0 || chatContext[chatContext.length - 1].role !== "user") {
+        messages.push({
+            role: "user",
+            content: prompt
+        });
+    }
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: messages,
+            temperature: 0.7
+        })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.error?.message || 'Failed to get response from OpenAI');
+    }
+    return data.choices[0].message.content;
+}
+
+// Translate text using Sarvam API
+async function translateText(text, sourceLanguage, targetLanguage) {
+    const response = await fetch('https://api.sarvam.ai/translate', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'api-subscription-key': SARVAM_API_KEY
+        },
+        body: JSON.stringify({
+            input: text,
+            source_language_code: sourceLanguage,
+            target_language_code: targetLanguage,
+            mode: 'formal',
+            enable_preprocessing: true
+        })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error('Failed to translate text');
+    }
+    return data.translated_text;
+}
+
+// Convert text to speech using Sarvam API
+async function textToSpeech(text, languageCode, speaker) {
+    // Preprocess text to meet API requirements and remove LaTeX for better TTS
+    const processedText = text.replace(/\$([^$]+)\$/g, '$1') // Remove inline math delimiters
+                              .replace(/\$\$([^$]+)\$\$/g, '$1') // Remove display math delimiters
+                              .replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '$1 divided by $2') // Convert fractions to words
+                              .replace(/\\times/g, 'times') // Convert \times to words
+                              .replace(/\\[a-zA-Z]+/g, ''); // Remove other LaTeX commands
+    
+    const chunks = preprocessTextForTTS(processedText);
+    
+    // Make API calls for each chunk and combine results
+    let allAudios = [];
+    
+    for (let i = 0; i < chunks.length; i++) {
+        const response = await fetch('https://api.sarvam.ai/text-to-speech', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'api-subscription-key': SARVAM_API_KEY
+            },
+            body: JSON.stringify({
+                inputs: [chunks[i]],
+                target_language_code: languageCode,
+                speaker: speaker,
+                enable_preprocessing: true,
+                model: 'bulbul:v1'
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error('Failed to convert text to speech');
+        }
+        
+        // Store audio data
+        allAudios.push(data.audios[0]);
+    }
+    
+    // Return an object with all audio chunks
+    return {
+        audioChunks: allAudios,
+        fullText: text
+    };
+}
+
+// Function to preprocess text according to API limitations
+function preprocessTextForTTS(text) {
+    // Remove markdown formatting for TTS
+    const plainText = text.replace(/\*\*(.*?)\*\*/g, '$1') // Bold
+                         .replace(/\*(.*?)\*/g, '$1')      // Italic
+                         .replace(/```([\s\S]*?)```/g, '') // Code blocks
+                         .replace(/`(.*?)`/g, '$1')        // Inline code
+                         .replace(/\[(.*?)\]\((.*?)\)/g, '$1') // Links
+                         .replace(/#{1,6}\s(.*?)(\n|$)/g, '$1'); // Headers
+    
+    // Maximum character limit per chunk
+    const MAX_CHAR_LIMIT = 500;
+    
+    // If text is already within limits, return as is
+    if (plainText.length <= MAX_CHAR_LIMIT) {
+        return [plainText];
+    }
+    
+    const chunks = [];
+    let currentPos = 0;
+    
+    while (currentPos < plainText.length) {
+        // Find a good breaking point (end of sentence or punctuation)
+        let breakPoint = currentPos + MAX_CHAR_LIMIT;
+        if (breakPoint >= plainText.length) {
+            breakPoint = plainText.length;
+        } else {
+            // Try to find sentence breaks (., !, ?)
+            const sentenceEndPos = findLastSentenceEnd(plainText, currentPos, breakPoint);
+            if (sentenceEndPos > currentPos) {
+                breakPoint = sentenceEndPos + 1; // Include the punctuation
+            } else {
+                // If no sentence break, try to find space
+                const spacePos = plainText.lastIndexOf(' ', breakPoint);
+                if (spacePos > currentPos) {
+                    breakPoint = spacePos + 1; // Include the space
+                }
+                // If we couldn't find a good break, just cut at max length
+            }
+        }
+        
+        // Add the chunk
+        chunks.push(plainText.substring(currentPos, breakPoint).trim());
+        currentPos = breakPoint;
+        
+        // Limit to 3 chunks as per API limitation
+        if (chunks.length >= 3 && currentPos < plainText.length) {
+            // If we have more text but already at 3 chunks, combine the rest
+            chunks[2] += "..."; // Add ellipsis to indicate truncation
+            break;
+        }
+    }
+    
+    return chunks;
+}
+
+// Helper function to find the last sentence end within a range
+function findLastSentenceEnd(text, start, end) {
+    const sentenceEndChars = ['.', '!', '?', ';'];
+    let lastPos = -1;
+    
+    for (const char of sentenceEndChars) {
+        const pos = text.lastIndexOf(char, end);
+        if (pos > start && pos > lastPos) {
+            lastPos = pos;
+        }
+    }
+    
+    return lastPos;
+}
+
+// Add message to chat with improved math rendering
+function addMessage(text, sender, parseMarkdown = false) {
+    const messagesDiv = document.getElementById('chatMessages');
+    const messageDiv = document.createElement('div');
+    const id = 'msg-' + Date.now();
+    messageDiv.id = id;
+    messageDiv.className = `message ${sender}-message`;
+    
+    // Parse markdown if it's a bot message and parseMarkdown is true
+    if (sender === 'bot' && parseMarkdown) {
+        // Process mathematical expressions for better rendering
+        
+        // Handle Ohm's Law specific patterns
+        text = text.replace(/I = V\/R/g, 'I = $\\frac{V}{R}$');
+        text = text.replace(/V = I \* R/g, 'V = $I \\times R$');
+        text = text.replace(/V = IR/g, 'V = $I \\times R$');
+        text = text.replace(/R = V\/I/g, 'R = $\\frac{V}{I}$');
+        
+        // Ensure LaTeX fractions are properly formatted
+        text = text.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '\\frac{$1}{$2}');
+        
+        // Convert special patterns for variables in equations
+        text = text.replace(/\b([VIR])\b/g, '$1');
+        
+        // Convert markdown to HTML with math expressions intact
+        const htmlContent = md.render(text);
+        messageDiv.innerHTML = htmlContent;
+    } else {
+        messageDiv.textContent = text;
+    }
+    
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    return id;
+}
+
+// Add audio player to message that can play all chunks sequentially
+function addAudioPlayer(messageId, audioData) {
+    const messageDiv = document.getElementById(messageId);
+    if (!messageDiv) return;
+
+    // Create container for the audio controls
+    const audioControlContainer = document.createElement('div');
+    audioControlContainer.className = 'audio-control';
+    
+    // Create play button
+    const playButton = document.createElement('span');
+    playButton.innerHTML = '🔊 Play audio';
+    playButton.style.cursor = 'pointer';
+    
+    // Setup audio player and chunks
+    const audioChunks = audioData.audioChunks;
+    const audioPlayers = audioChunks.map(audioBase64 => {
+        const audio = new Audio();
+        audio.src = 'data:audio/wav;base64,' + audioBase64;
+        return audio;
+    });
+    
+    // Track current playing chunk
+    let currentChunk = 0;
+    let isPlaying = false;
+    
+    // Function to play all chunks in sequence
+    function playAllChunks() {
+        if (isPlaying) {
+            // Pause current playback
+            audioPlayers[currentChunk].pause();
+            audioPlayers[currentChunk].currentTime = 0;
+            isPlaying = false;
+            playButton.innerHTML = '🔊 Play audio';
+            return;
+        }
+        
+        isPlaying = true;
+        currentChunk = 0;
+        playButton.innerHTML = '⏸️ Pause audio';
+        
+        // Play first chunk
+        playNextChunk();
+    }
+    
+    // Function to play next chunk when current one finishes
+    function playNextChunk() {
+        if (currentChunk >= audioPlayers.length) {
+            // All chunks finished
+            isPlaying = false;
+            playButton.innerHTML = '🔊 Play audio';
+            currentChunk = 0;
+            return;
+        }
+        
+        const currentPlayer = audioPlayers[currentChunk];
+        
+        // Set up event listener for when this chunk ends
+        currentPlayer.onended = function() {
+            currentChunk++;
+            playNextChunk();
+        };
+        
+        // Play current chunk
+        currentPlayer.play().catch(error => {
+            console.error("Error playing audio chunk:", error);
+            isPlaying = false;
+            playButton.innerHTML = '🔊 Play audio';
+        });
+    }
+    
+    // Attach click event to play button
+    playButton.onclick = playAllChunks;
+    
+    // Add play button to container
+    audioControlContainer.appendChild(playButton);
+    
+    // Add the audio control to the message
+    messageDiv.appendChild(audioControlContainer);
+}
+
+// Toggle voice recording
+function toggleVoiceInput() {
+    if (isRecording) {
+        stopRecording();
+    } else {
+        startRecording();
+    }
+}
+
+// Start voice recording
+async function startRecording() {
+    try {
+        const voiceBtn = document.getElementById('voiceBtn');
+        const statusIndicator = document.getElementById('statusIndicator');
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        
+        // Set button to recording state
+        voiceBtn.classList.add('recording');
+        isRecording = true;
+        recordingSeconds = 0;
+        
+        // Update status indicator
+        statusIndicator.textContent = 'Recording... (0s)';
+        
+        // Start timer
+        recordingTimer = setInterval(() => {
+            recordingSeconds++;
+            statusIndicator.textContent = `Recording... (${recordingSeconds}s)`;
+            
+            // Auto-stop recording after 60 seconds
+            if (recordingSeconds >= 60) {
+                stopRecording();
+            }
+        }, 1000);
+        
+        // Handle data available event
+        mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+        };
+        
+        // Handle recording stop event
+        mediaRecorder.onstop = async () => {
+            // Create audio blob
+            audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            
+            // Show processing message
+            statusIndicator.textContent = 'Processing audio...';
+            
+            try {
+                // Get selected language code
+                const languageCode = document.getElementById('languageSelect').value;
+                
+                // Convert speech to text
+                const text = await speechToText(audioBlob, languageCode);
+                
+                // Add message to input field
+                document.getElementById('userInput').value = text;
+                
+                // Clear status
+                statusIndicator.textContent = '';
+                
+                // Send message
+                sendMessage();
+            } catch (error) {
+                console.error('Speech to text error:', error);
+                statusIndicator.textContent = 'Failed to process speech. Please try again.';
+                setTimeout(() => {
+                    statusIndicator.textContent = '';
+                }, 3000);
+            }
+        };
+        
+        // Start recording
+        mediaRecorder.start();
+    } catch (error) {
+        console.error('Error starting recording:', error);
+        statusIndicator.textContent = 'Microphone access denied or not available.';
+        isRecording = false;
+    }
+}
+
+// Stop voice recording
+function stopRecording() {
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+    
+    const voiceBtn = document.getElementById('voiceBtn');
+    
+    // Reset button state
+    voiceBtn.classList.remove('recording');
+    isRecording = false;
+    
+    // Clear timer
+    clearInterval(recordingTimer);
+    
+    // Stop recording
+    mediaRecorder.stop();
+    
+    // Stop all tracks in the stream
+    mediaRecorder.stream.getTracks().forEach(track => track.stop());
+}
+
+// Convert speech to text using Sarvam API
+// Convert speech to text using Sarvam API
+async function speechToText(audioBlob, languageCode) {
+    // Create FormData object for multipart/form-data request
+    const formData = new FormData();
+    
+    // Add the audio file to the form data
+    formData.append('file', audioBlob, 'recording.wav');
+    
+    // Set the model parameter
+    formData.append('model', 'saaras:v2'); // You can choose between the available models
+    
+    try {
+        // Make API request
+        const response = await fetch('https://api.sarvam.ai/speech-to-text-translate', {
+            method: 'POST',
+            headers: {
+                'api-subscription-key': SARVAM_API_KEY
+                // Note: Do not set Content-Type header when using FormData
+                // The browser will set it automatically with the boundary parameter
+            },
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to convert speech to text: ${response.status} - ${errorText}`);
+        }
+        
+        const data = await response.json();
+        return data.transcript;
+    } catch (error) {
+        console.error('Speech to text error:', error);
+        throw error;
+    }
+}
+
+// Add event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Set up input form submission
+    document.getElementById('userInput').addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+            sendMessage(event);
+        }
+    });
+    
+    // Initialize with welcome message
+    addMessage('Hello! I am your multilingual assistant. I can understand and speak multiple Indian languages. How can I help you today?', 'bot');
+    
+    // Hide status indicator initially
+    document.getElementById('statusIndicator').textContent = '';
+});
+</script>
+</body>
+</html>
